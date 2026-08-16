@@ -67,10 +67,12 @@ impl PiRpcAdapter {
                 }
             }
         });
-        let response = receiver.recv_timeout(Duration::from_secs(20)).map_err(|_| {
-            stop_child(&mut child);
-            RunnerError::Rejected("Pi RPC capability handshake timed out".into())
-        })?;
+        let response = receiver
+            .recv_timeout(Duration::from_secs(20))
+            .map_err(|_| {
+                stop_child(&mut child);
+                RunnerError::Rejected("Pi RPC capability handshake timed out".into())
+            })?;
         stop_child(&mut child);
         if response.get("success").and_then(serde_json::Value::as_bool) != Some(true) {
             return Err(RunnerError::Rejected("Pi RPC rejected get_state".into()));
