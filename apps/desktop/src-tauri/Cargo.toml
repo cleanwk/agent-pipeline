@@ -1,0 +1,24 @@
+[package]
+name = "agent-pipeline-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+build = "build.rs"
+
+[lib]
+name = "agent_pipeline_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "agent-pipeline"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.5.4", features = [] }
+
+[dependencies]
+agent-pipeline-core = { path = "../../../crates/pipeline-core" }
+agent-pipeline-runner = { path = "../../../crates/pipeline-runner" }
+serde.workspace = true
+serde_json.workspace = true
+tauri = { version = "2.11.5", features = [] }

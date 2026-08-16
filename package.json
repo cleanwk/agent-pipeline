@@ -1,0 +1,18 @@
+{
+  "name": "agent-pipeline",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.29.3",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "dev": "pnpm --dir apps/desktop dev",
+    "build": "pnpm --dir apps/desktop build",
+    "test": "pnpm --dir apps/desktop test && cargo test --workspace",
+    "typecheck": "pnpm --dir apps/desktop typecheck",
+    "tauri": "pnpm --dir apps/desktop tauri",
+    "tauri:dev": "pnpm --dir apps/desktop tauri dev",
+    "tauri:build": "pnpm --dir apps/desktop tauri build --target aarch64-apple-darwin"
+  }
+}
