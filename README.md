@@ -57,6 +57,7 @@ brew install --cask cleanwk/tap/agent-pipeline
 ## Design and architecture
 
 - [Product contract](PRODUCT.md)
+- [Shipped design system](DESIGN.md)
 - [Domain context](CONTEXT.md)
 - [Architecture decisions](docs/adr/)
 - [Ecosystem research](docs/research/extensible-agent-pipeline-design.md)

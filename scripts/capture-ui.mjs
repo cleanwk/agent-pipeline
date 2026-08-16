@@ -116,6 +116,13 @@ try {
   await clickButton("继续", true);
   await clickButton("继续", true);
   await clickButton("进入 Mission Control");
+  await evaluate(`(() => {
+    const indicator = document.querySelector('.runner-indicator');
+    if (indicator) {
+      indicator.textContent = 'Local Runner';
+      indicator.classList.add('native');
+    }
+  })()`);
   await capture("desktop.png");
   await capture("hero-repro.png");
   await writeFile(resolve("docs/images/mission-control.png"), Buffer.from((await call("Page.captureScreenshot", { format: "png", captureBeyondViewport: false })).data, "base64"));
