@@ -54,6 +54,8 @@ pnpm tauri:build
 brew install --cask cleanwk/tap/agent-pipeline
 ```
 
+安装后的 App 会在启动时检查 GitHub Release 中经过签名的更新；也可从右上角“更多 → 检查版本更新”手动检查，并在 App 内完成下载、验证、安装和重启。发布仓库需要配置 `TAURI_SIGNING_PRIVATE_KEY`、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 和对应的 `TAURI_UPDATER_PUBLIC_KEY`，Release workflow 会生成供客户端读取的 `latest.json` 与签名更新包。源码开发配置中的 `__TAURI_UPDATER_PUBLIC_KEY__` 只作为占位符，正式构建会由 workflow 替换，私钥不得提交到仓库。
+
 ## Design and architecture
 
 - [Product contract](PRODUCT.md)
