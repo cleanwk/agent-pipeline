@@ -34,6 +34,13 @@
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": false,
+    "icon": [
+      "icons-v2/32x32.png",
+      "icons-v2/128x128.png",
+      "icons-v2/128x128@2x.png",
+      "icons-v2/icon.icns",
+      "icons-v2/icon.ico"
+    ],
     "targets": [
       "app",
       "dmg"

@@ -37,6 +37,7 @@ jobs:
       - name: Verify version and release configuration
         id: version
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -55,9 +56,25 @@ jobs:
           test "$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")" = "$version"
           grep -Fqx "version = \"$version\"" Cargo.toml
           if git rev-parse "refs/tags/v${version}" >/dev/null 2>&1; then
-            echo "Tag v${version} already exists; refusing to overwrite an immutable release." >&2
-            exit 1
+            if ! draft="$(gh release view "v${version}" --json isDraft --jq .isDraft 2>/dev/null)" || test "$draft" != true; then
+              echo "Tag v${version} already belongs to a published release; refusing to overwrite it." >&2
+              exit 1
+            fi
           fi
+
+          require_secret_group() {
+            local label="$1"
+            shift
+            local missing=()
+            local name
+            for name in "$@"; do
+              test -n "${!name}" || missing+=("$name")
+            done
+            if test "${#missing[@]}" -ne 0; then
+              echo "${label} is required for public macOS releases; missing secrets: ${missing[*]}" >&2
+              exit 1
+            fi
+          }
 
           validate_optional_secret_group() {
             local label="$1"
@@ -74,12 +91,10 @@ jobs:
             test "$configured" -eq "$#"
           }
 
-          apple_signing=false
           updater_signing=false
-          validate_optional_secret_group "Apple signing" APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID && apple_signing=true
+          require_secret_group "Apple signing and notarization" APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
           validate_optional_secret_group "Tauri updater signing" TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD TAURI_UPDATER_PUBLIC_KEY && updater_signing=true
 
-          echo "apple_signing=${apple_signing}" >> "$GITHUB_OUTPUT"
           echo "updater_signing=${updater_signing}" >> "$GITHUB_OUTPUT"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
 
@@ -101,7 +116,6 @@ jobs:
           NODE
 
       - name: Export Apple signing environment
-        if: steps.version.outputs.apple_signing == 'true'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -128,7 +142,8 @@ jobs:
             printf '%s<<%s\n%s\n%s\n' "$name" "$delimiter" "${!name}" "$delimiter" >> "$GITHUB_ENV"
           done
 
-      - name: Build and publish DMG
+      - name: Build and stage signed DMG
+        id: tauri
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -137,5 +152,18 @@ jobs:
           releaseName: Agent Pipeline v__VERSION__
           releaseBody: Download the Apple Silicon DMG below and drag Agent Pipeline into Applications.
           generateReleaseNotes: true
-          releaseDraft: false
+          releaseDraft: true
           args: --target aarch64-apple-darwin
+
+      - name: Verify signed and notarized bundle
+        shell: bash
+        run: |
+          app_path="target/aarch64-apple-darwin/release/bundle/macos/Agent Pipeline.app"
+          dmg_path="$(find target/aarch64-apple-darwin/release/bundle/dmg -maxdepth 1 -name '*.dmg' -print -quit)"
+          scripts/verify-macos-release.sh "$app_path" "$dmg_path"
+
+      - name: Publish verified release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: gh release edit "v${VERSION}" --draft=false
