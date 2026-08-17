@@ -58,7 +58,7 @@ brew install --cask cleanwk/tap/agent-pipeline
 
 ## 发布新版本
 
-运行 `pnpm release:version <版本号>`（例如 `pnpm release:version 0.2.0`），检查生成的版本改动后提交并推送到 `main`。脚本会同步根项目、桌面端、Tauri 和 Rust workspace 的版本；`VERSION` 的变更会自动触发 GitHub Actions，在 macOS runner 上构建 Apple Silicon DMG，然后创建 `v<版本号>` GitHub Release；配置 Apple signing secrets 后，构建还会完成 Developer ID 签名与公证。用户可以直接从该 Release 下载 DMG 安装。
+运行 `pnpm release:version <版本号>`（例如 `pnpm release:version 0.2.0`），检查生成的版本改动后提交并推送到 `master`。脚本会同步根项目、桌面端、Tauri 和 Rust workspace 的版本；只有 `master` 上的 `VERSION` 发生变化时才会触发 GitHub Actions，在 macOS runner 上构建 Apple Silicon DMG，然后创建 `v<版本号>` GitHub Release。普通开发提交不会触发发布构建；常规 CI 仅在 Pull Request 或手动触发时运行。配置 Apple signing secrets 后，构建还会完成 Developer ID 签名与公证。用户可以直接从该 Release 下载 DMG 安装。
 
 如需 Developer ID 签名与公证，仓库应配置 `APPLE_CERTIFICATE`、`APPLE_CERTIFICATE_PASSWORD`、`APPLE_SIGNING_IDENTITY`、`APPLE_ID`、`APPLE_PASSWORD`、`APPLE_TEAM_ID`。Apple 与 Tauri updater 两组 secrets 都是可选配置，但每组一旦启用就必须完整配置；均未配置时工作流会发布未签名 DMG。工作流会拒绝覆盖已经存在的版本 Tag，失败后应发布一个新版本号。
 
