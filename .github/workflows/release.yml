@@ -34,7 +34,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: pnpm install --frozen-lockfile
 
-      - name: Verify version and signing prerequisites
+      - name: Verify version and release configuration
         id: version
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -58,35 +58,80 @@ jobs:
             echo "Tag v${version} already exists; refusing to overwrite an immutable release." >&2
             exit 1
           fi
-          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD TAURI_UPDATER_PUBLIC_KEY; do
-            test -n "${!name}" || { echo "Missing required release secret: ${name}" >&2; exit 1; }
-          done
+
+          validate_optional_secret_group() {
+            local label="$1"
+            shift
+            local configured=0
+            local name
+            for name in "$@"; do
+              test -z "${!name}" || configured=$((configured + 1))
+            done
+            if test "$configured" -ne 0 && test "$configured" -ne "$#"; then
+              echo "${label} is only partially configured; set all of these secrets or none of them: $*" >&2
+              exit 1
+            fi
+            test "$configured" -eq "$#"
+          }
+
+          apple_signing=false
+          updater_signing=false
+          validate_optional_secret_group "Apple signing" APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID && apple_signing=true
+          validate_optional_secret_group "Tauri updater signing" TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD TAURI_UPDATER_PUBLIC_KEY && updater_signing=true
+
+          echo "apple_signing=${apple_signing}" >> "$GITHUB_OUTPUT"
+          echo "updater_signing=${updater_signing}" >> "$GITHUB_OUTPUT"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
 
-      - name: Configure updater verification key
+      - name: Configure updater artifacts
         env:
           TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+          UPDATER_SIGNING: ${{ steps.version.outputs.updater_signing }}
         run: |
           node - <<'NODE'
           const fs = require("node:fs");
           const path = "apps/desktop/src-tauri/tauri.conf.json";
           const config = JSON.parse(fs.readFileSync(path, "utf8"));
-          config.plugins.updater.pubkey = process.env.TAURI_UPDATER_PUBLIC_KEY;
+          const updaterSigning = process.env.UPDATER_SIGNING === "true";
+          config.bundle.createUpdaterArtifacts = updaterSigning;
+          if (updaterSigning) {
+            config.plugins.updater.pubkey = process.env.TAURI_UPDATER_PUBLIC_KEY;
+          }
           fs.writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`);
           NODE
 
-      - name: Build, sign, notarize, and publish DMG
-        uses: tauri-apps/tauri-action@v1
+      - name: Export Apple signing environment
+        if: steps.version.outputs.apple_signing == 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        shell: bash
+        run: |
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            delimiter="release-secret-$(uuidgen)"
+            printf '%s<<%s\n%s\n%s\n' "$name" "$delimiter" "${!name}" "$delimiter" >> "$GITHUB_ENV"
+          done
+
+      - name: Export updater signing environment
+        if: steps.version.outputs.updater_signing == 'true'
+        env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          for name in TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD; do
+            delimiter="release-secret-$(uuidgen)"
+            printf '%s<<%s\n%s\n%s\n' "$name" "$delimiter" "${!name}" "$delimiter" >> "$GITHUB_ENV"
+          done
+
+      - name: Build and publish DMG
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: v__VERSION__
           releaseName: Agent Pipeline v__VERSION__
