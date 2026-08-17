@@ -7,8 +7,9 @@ FORM: 系统制图台，批准构图 A，seed 0098c679。FINISH: unreviewed and 
 -->
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { Archive, Boxes, ChevronDown, CircleHelp, FileCode2, FileStack, GitBranch, Moon, MoreHorizontal, PanelTop, Plus, Radar, RotateCcw, Settings, ShieldCheck, Sun, WandSparkles } from "@lucide/vue";
-import { bootstrap, dispatch, inspectInstalledPackage, installPackage, startWindowDrag, toggleWindowMaximize } from "./api";
+import { Archive, Boxes, ChevronDown, CircleHelp, Download, FileCode2, FileStack, GitBranch, Moon, MoreHorizontal, PanelTop, Plus, Radar, RefreshCw, RotateCcw, Settings, ShieldCheck, Sun, WandSparkles, X } from "@lucide/vue";
+import { bootstrap, checkForAppUpdate, dispatch, inspectInstalledPackage, installAppUpdate, installPackage, startWindowDrag, toggleWindowMaximize } from "./api";
+import type { AppUpdate } from "./api";
 import { demoAgents, demoRun } from "./demo";
 import { demoDefinition } from "./definition";
 import type { AgentProbe, PipelineDefinition, RunProjection } from "./types";
@@ -45,6 +46,11 @@ const moreOpen = ref(false);
 const permissionsOpen = ref(false);
 const toast = ref("");
 const activeDeliverySlot = ref("全部产物");
+const updateOpen = ref(false);
+const updateState = ref<"idle" | "checking" | "available" | "current" | "installing" | "error">("idle");
+const appUpdate = ref<AppUpdate | null>(null);
+const updateProgress = ref(0);
+const updateError = ref("");
 
 const selectedNode = computed(() => run.value.nodes.find((node) => node.id === selectedNodeId.value) ?? run.value.nodes[0]!);
 const selectedDefinition = computed(() => definition.value.nodes.find((node) => node.nodeId === selectedNodeId.value) ?? definition.value.nodes[0]!);
@@ -63,10 +69,37 @@ async function loadApp() {
     native.value = data.native;
     selectedNodeId.value = data.run.selectedNodeId || "review";
     definition.value = data.definition;
+    if (data.native) void checkUpdate(false);
   } catch (error) {
     bootError.value = error instanceof Error ? error.message : String(error);
   } finally {
     loading.value = false;
+  }
+}
+
+async function checkUpdate(showPanel = true) {
+  if (showPanel) updateOpen.value = true;
+  updateState.value = "checking";
+  updateError.value = "";
+  try {
+    appUpdate.value = await checkForAppUpdate();
+    updateState.value = appUpdate.value ? "available" : "current";
+    if (appUpdate.value) updateOpen.value = true;
+  } catch (error) {
+    updateState.value = "error";
+    updateError.value = error instanceof Error ? error.message : String(error);
+    if (!showPanel) updateOpen.value = false;
+  }
+}
+
+async function applyUpdate() {
+  updateState.value = "installing";
+  updateProgress.value = 0;
+  try {
+    await installAppUpdate((progress) => { updateProgress.value = progress; });
+  } catch (error) {
+    updateState.value = "error";
+    updateError.value = error instanceof Error ? error.message : String(error);
   }
 }
 
@@ -171,7 +204,7 @@ async function installProposal() {
         <button :class="{ active: mainView === 'artifacts' }" @click="mainView = 'artifacts'"><FileStack :size="15" />Deliverables <span>{{ run.artifacts.length }}</span></button>
         <button :class="{ active: mainView === 'author' }" @click="mainView = 'author'"><WandSparkles :size="15" />Create Preview</button>
         <div class="theme-control"><button aria-haspopup="menu" :aria-expanded="themeOpen" @click="themeOpen = !themeOpen"><Sun v-if="theme === 'draft' || theme === 'warm'" :size="15" /><Moon v-else-if="theme === 'night'" :size="15" /><PanelTop v-else :size="15" />{{ themeLabel }}<ChevronDown :size="13" /></button><div v-if="themeOpen" class="theme-menu" role="menu"><button v-for="choice in (['system','draft','night','warm'] as ThemeName[])" :key="choice" role="menuitemradio" :aria-checked="theme === choice" @click="chooseTheme(choice)"><span :class="`theme-swatch swatch-${choice}`"></span>{{ ({ system: 'System · 跟随 macOS', draft: 'Draft Light', night: 'Night Ops', warm: 'Warm Paper' } as const)[choice] }}</button></div></div>
-        <div class="popover-control"><button class="icon-button" aria-label="更多" :aria-expanded="moreOpen" @click="moreOpen = !moreOpen; helpOpen = false"><MoreHorizontal :size="18" /></button><section v-if="moreOpen" class="utility-popover more-popover"><button @click="showDefinition(); moreOpen = false"><FileCode2 :size="15" />查看 Pipeline 定义</button><button @click="openDoctor"><Settings :size="15" />Environment Doctor</button><button @click="resetDemo(); moreOpen = false"><RotateCcw :size="15" />重置演示 Run</button></section></div>
+        <div class="popover-control"><button class="icon-button" aria-label="更多" :aria-expanded="moreOpen" @click="moreOpen = !moreOpen; helpOpen = false"><MoreHorizontal :size="18" /></button><section v-if="moreOpen" class="utility-popover more-popover"><button @click="showDefinition(); moreOpen = false"><FileCode2 :size="15" />查看 Pipeline 定义</button><button @click="openDoctor"><Settings :size="15" />Environment Doctor</button><button @click="checkUpdate(); moreOpen = false"><RefreshCw :size="15" />检查版本更新</button><button @click="resetDemo(); moreOpen = false"><RotateCcw :size="15" />重置演示 Run</button></section></div>
       </div>
     </nav>
 
@@ -211,5 +244,25 @@ async function installProposal() {
       </section>
     </main>
     <div class="app-toast" role="status" aria-live="polite" :class="{ visible: toast }">{{ toast }}</div>
+    <div v-if="updateOpen" class="update-backdrop" @click.self="updateState !== 'installing' && (updateOpen = false)">
+      <section class="update-dialog" role="dialog" aria-modal="true" aria-labelledby="update-title">
+        <button v-if="updateState !== 'installing'" class="update-close" aria-label="关闭" @click="updateOpen = false"><X :size="16" /></button>
+        <span class="panel-symbol"><Download :size="24" /></span>
+        <h2 id="update-title">{{ updateState === 'available' || updateState === 'installing' ? `Agent Pipeline ${appUpdate?.version}` : '版本更新' }}</h2>
+        <p v-if="updateState === 'checking'">正在安全地检查新版本…</p>
+        <p v-else-if="updateState === 'current'">你正在使用最新版本。</p>
+        <template v-else-if="updateState === 'available' || updateState === 'installing'">
+          <p>当前版本 {{ appUpdate?.currentVersion }} · 新版本 {{ appUpdate?.version }}</p>
+          <div v-if="appUpdate?.notes" class="update-notes">{{ appUpdate.notes }}</div>
+          <div v-if="updateState === 'installing'" class="update-progress"><span :style="{ width: `${updateProgress}%` }"></span></div>
+          <small v-if="updateState === 'installing'">已下载 {{ updateProgress }}%，完成后将自动重启应用。</small>
+        </template>
+        <p v-else-if="updateState === 'error'" class="update-error">检查或安装失败：{{ updateError }}</p>
+        <footer>
+          <button v-if="updateState === 'available'" class="primary-action" @click="applyUpdate"><Download :size="15" />下载、安装并重启</button>
+          <button v-else-if="updateState === 'current' || updateState === 'error'" class="secondary-action" @click="checkUpdate()"><RefreshCw :size="15" />重新检查</button>
+        </footer>
+      </section>
+    </div>
   </div>
 </template>

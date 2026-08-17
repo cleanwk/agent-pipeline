@@ -5,6 +5,16 @@ import type { AgentProbe, InstalledPackage, McpBinding, PipelineDefinition, RunP
 
 export type { PipelineCommand } from "./projection";
 
+export interface AppUpdate {
+  currentVersion: string;
+  version: string;
+  notes?: string;
+  publishedAt?: string;
+}
+
+type NativeUpdate = Awaited<ReturnType<typeof import("@tauri-apps/plugin-updater")["check"]>>;
+let pendingUpdate: NativeUpdate = null;
+
 const copy = <T>(value: T): T => structuredClone(value);
 let browserRun = copy(demoRun);
 
@@ -14,7 +24,7 @@ async function tauriInvoke<T>(command: string, args?: Record<string, unknown>): 
 }
 
 function isTauriRuntime(): boolean {
-  return "__TAURI_INTERNALS__" in window;
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
 export async function bootstrap(): Promise<{ run: RunProjection; agents: AgentProbe[]; native: boolean; definition: PipelineDefinition }> {
@@ -118,4 +128,31 @@ export async function toggleWindowMaximize(): Promise<void> {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
     await getCurrentWindow().toggleMaximize();
   } catch { /* Browser preview has no native window. */ }
+}
+
+export async function checkForAppUpdate(): Promise<AppUpdate | null> {
+  if (!isTauriRuntime()) return null;
+  const { check } = await import("@tauri-apps/plugin-updater");
+  pendingUpdate = await check();
+  if (!pendingUpdate) return null;
+  return {
+    currentVersion: pendingUpdate.currentVersion,
+    version: pendingUpdate.version,
+    notes: pendingUpdate.body,
+    publishedAt: pendingUpdate.date
+  };
+}
+
+export async function installAppUpdate(onProgress: (percent: number) => void): Promise<void> {
+  if (!pendingUpdate) throw new Error("请先检查可用更新。");
+  let downloaded = 0;
+  let total = 0;
+  await pendingUpdate.downloadAndInstall((event) => {
+    if (event.event === "Started") total = event.data.contentLength ?? 0;
+    if (event.event === "Progress") downloaded += event.data.chunkLength;
+    if (total > 0) onProgress(Math.min(100, Math.round((downloaded / total) * 100)));
+    if (event.event === "Finished") onProgress(100);
+  });
+  const { relaunch } = await import("@tauri-apps/plugin-process");
+  await relaunch();
 }
