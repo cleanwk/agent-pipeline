@@ -12,8 +12,11 @@ use std::{
     time::Duration,
 };
 
-use agent_pipeline_core::{Command, Engine, LoadedPackage, RunProjection};
+use agent_pipeline_core::{
+    Command, Engine, LoadedPackage, PackageManifest, PipelineDefinition, RunProjection,
+};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 pub const PROTOCOL_VERSION: u32 = 1;
@@ -135,6 +138,17 @@ enum Operation {
     Snapshot,
     Dispatch(Command),
     InstallPackage { source_path: PathBuf },
+    InspectPackage { source_path: PathBuf },
+    InspectInstalledPackage { name: String, version: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackageInspection {
+    pub root: PathBuf,
+    pub digest: String,
+    pub manifest: PackageManifest,
+    pub pipelines: Vec<PipelineDefinition>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -154,6 +168,7 @@ struct Response {
     ok: bool,
     run: Option<RunProjection>,
     package: Option<InstalledPackage>,
+    inspection: Option<PackageInspection>,
     error: Option<String>,
 }
 
@@ -191,6 +206,27 @@ impl RunnerClient {
         })?
         .package
         .ok_or_else(|| RunnerError::Rejected("install response omitted package".into()))
+    }
+
+    pub fn inspect_package(&self, source_path: impl Into<PathBuf>) -> Result<PackageInspection> {
+        self.request(Operation::InspectPackage {
+            source_path: source_path.into(),
+        })?
+        .inspection
+        .ok_or_else(|| RunnerError::Rejected("inspect response omitted definition".into()))
+    }
+
+    pub fn inspect_installed_package(
+        &self,
+        name: impl Into<String>,
+        version: impl Into<String>,
+    ) -> Result<PackageInspection> {
+        self.request(Operation::InspectInstalledPackage {
+            name: name.into(),
+            version: version.into(),
+        })?
+        .inspection
+        .ok_or_else(|| RunnerError::Rejected("inspect response omitted definition".into()))
     }
 
     fn request(&self, operation: Operation) -> Result<Response> {
@@ -308,6 +344,26 @@ fn handle_connection(mut stream: UnixStream, state: &RunnerState) -> Result<()> 
                     Err(error) => failure(error.to_string()),
                 }
             }
+            Operation::InspectPackage { source_path } => match LoadedPackage::load(&source_path) {
+                Ok(package) => match inspect_loaded_package(package) {
+                    Ok(inspection) => inspection_success(inspection),
+                    Err(error) => failure(error.to_string()),
+                },
+                Err(error) => failure(error.to_string()),
+            },
+            Operation::InspectInstalledPackage { name, version } => {
+                if !safe_segment(&name) || !safe_segment(&version) {
+                    failure("package name and version must be safe path segments".into())
+                } else {
+                    match LoadedPackage::load(state.package_root.join(name).join(version)) {
+                        Ok(package) => match inspect_loaded_package(package) {
+                            Ok(inspection) => inspection_success(inspection),
+                            Err(error) => failure(error.to_string()),
+                        },
+                        Err(error) => failure(error.to_string()),
+                    }
+                }
+            }
         },
         Ok(request) => failure(format!(
             "unsupported runner protocol {}",
@@ -321,12 +377,24 @@ fn handle_connection(mut stream: UnixStream, state: &RunnerState) -> Result<()> 
     Ok(())
 }
 
+fn inspect_loaded_package(package: LoadedPackage) -> Result<PackageInspection> {
+    let bytes = serde_json::to_vec(&(&package.manifest, &package.pipelines))?;
+    let digest = format!("sha256:{}", hex::encode(Sha256::digest(bytes)));
+    Ok(PackageInspection {
+        root: package.root,
+        digest,
+        manifest: package.manifest,
+        pipelines: package.pipelines,
+    })
+}
+
 fn success(run: Option<RunProjection>) -> Response {
     Response {
         protocol_version: PROTOCOL_VERSION,
         ok: true,
         run,
         package: None,
+        inspection: None,
         error: None,
     }
 }
@@ -337,6 +405,18 @@ fn package_success(package: InstalledPackage) -> Response {
         ok: true,
         run: None,
         package: Some(package),
+        inspection: None,
+        error: None,
+    }
+}
+
+fn inspection_success(inspection: PackageInspection) -> Response {
+    Response {
+        protocol_version: PROTOCOL_VERSION,
+        ok: true,
+        run: None,
+        package: None,
+        inspection: Some(inspection),
         error: None,
     }
 }
@@ -347,6 +427,7 @@ fn failure(error: String) -> Response {
         ok: false,
         run: None,
         package: None,
+        inspection: None,
         error: Some(error),
     }
 }

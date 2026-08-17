@@ -154,13 +154,13 @@ Use the native macOS sans stack for the application and SF Mono-compatible faces
 
 ## Layout
 
-The Run first viewport is invariant: a `42px` native titlebar, a `72px` command bar, then three full-height columns—Attention (`246px`), Graph (`minmax(600px, 1fr)`), and fixed Inspector (`300px`). The center Graph owns the visual field; side rails support it and scroll independently. The Graph uses a `28px` drafting grid and a stable stage, so causality does not jump as events arrive.
+The Run first viewport is invariant: a `42px` native titlebar, a `72px` command bar, then three full-height columns—Attention (`224px`), Graph (`minmax(540px, 1fr)`), and fixed Inspector (`336px`). The center Graph owns the visual field; side rails support it and scroll independently. The Graph uses a `28px` drafting grid and a stable stage, so causality does not jump as events arrive. Node subtasks live in a dedicated Activity lane below the topology; they never resize a node into the history band.
 
 Node Focus is a state change, not a modal: hide Attention and Graph, then center the Inspector as a paper sheet up to `920px` wide with `28px` vertical breathing room. Preserve its tabs, facts, and actions so focus feels like zooming into the same Node.
 
 Deliverables use a restrained two-column index + revision list. Authoring uses intent + proposal preview. Neither should devolve into cards: rows, manifests, permissions, validation output, provenance, and revisions are the content.
 
-At widths up to `1220px`, compress Attention/Inspector to `210px/280px`, collapse command labels to icons, and truncate the Run brief; retain the three-column causal model. This is a macOS desktop product: do not invent a phone dashboard. If a narrower adaptive surface is introduced, make Attention and Inspector explicit switchable modes and keep Graph geometry horizontally scrollable rather than stacking unrelated panels.
+At widths up to `1220px`, compress Attention/Inspector to `186px/318px`, collapse command labels to icons, and truncate the Run brief; retain the three-column causal model. This is a macOS desktop product: do not invent a phone dashboard. If a narrower adaptive surface is introduced, make Attention and Inspector explicit switchable modes and keep Graph geometry horizontally scrollable rather than stacking unrelated panels.
 
 Use a compact `5–16px` control rhythm, `28px` section/grid rhythm, and `30–52px` padding only for focused onboarding or authoring canvases. Every scroll region needs `min-width/min-height: 0`; application chrome itself does not scroll.
 
@@ -184,7 +184,8 @@ Borders are normally `1px`; an active attention node may strengthen to `1.5px`. 
 
 - **Titlebar and command bar:** native drag surface above a paper command strip. Keep Runner health visible, theme selection compact, and icon buttons labeled. Active view uses a subtle ink wash, not a saturated tab.
 - **Attention Rail:** fixed intervention queue with icon, title, evidence summary, and time. Selected rows gain an attention wash plus a `2px` leading rule. The empty state says execution can continue; it is not a celebration card.
-- **Run Graph:** the primary navigation and explanation surface. Nodes are fixed-position technical plates with index, status mark, title, state, and time. Edges express causality; activity expands beneath the owning Node without changing the Graph's meaning.
+- **Run Graph:** the primary navigation and explanation surface. Nodes are data-derived technical plates with index, status mark, title, state, and time. Edges express causality; selected-node Activity projects into a separate lane without changing Graph geometry.
+- **Pipeline Definition:** an immutable, inspectable projection of the Package used by the Run. It exposes source, protocol, digest, Node prompt/action, contracts, context policy, sandbox, Skill bindings, exact MCP tool grants, and capabilities. Configuration stays natural-language; model edits create a proposal for a new version rather than mutating the frozen Run.
 - **Graph state grammar:** completed = green filled check; running = blue spinner and blue border; waiting = muted dashed enclosure; attention/failed = vermilion alert or failure mark; selected = semantic blue ring unless attention; historical Attempt = faint dashed plate in a dedicated lower band. A feedback edge is stronger than an ordinary edge. Never erase or overwrite a prior Attempt.
 - **Node Inspector:** fixed right rail with Overview, Activity, Artifacts, and Logs. It owns evidence, runtime facts, diff review, recovery/advance actions, and the Node Focus affordance. Logs remain an explicit raw-session escape hatch, not the default story.
 - **StatusMark:** one reusable icon grammar across Graph, Attention, timelines, Doctor, and artifacts. Always expose an accessible status name.

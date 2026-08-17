@@ -17,6 +17,9 @@ export const demoRun: RunProjection = {
   branch: "agent/refund-capability",
   brief: "退款能力已完成需求澄清、Ticket 与技术方案。Implement Attempt 1 已发布实现与测试结果；Review 正等待确认异步退款幂等边界。",
   eventCount: 47,
+  definitionPackage: "seven-stage-product-delivery",
+  definitionVersion: "0.2.0",
+  definitionDigest: "sha256:c54ba184…e18708",
   selectedNodeId: "review",
   nodes: [
     { id: "grill", index: 1, title: "Grill", kind: "agent", status: "completed", attempt: 1, finishedAt: "10:15", duration: "8m", runtime: "Pi", artifactIds: ["grill-record"], activities: [

@@ -58,6 +58,9 @@ export interface RunProjection {
   brief: string;
   selectedNodeId?: string;
   eventCount: number;
+  definitionPackage: string;
+  definitionVersion: string;
+  definitionDigest: string;
 }
 
 export interface AgentProbe {
@@ -76,4 +79,40 @@ export interface InstalledPackage {
   version: string;
   pipelineCount: number;
   installPath: string;
+}
+
+export interface McpBinding {
+  name: string;
+  transport: "stdio" | "http";
+  tools: string[];
+  permission: "read" | "write" | "deploy";
+}
+
+export interface NodeDefinition {
+  nodeId: string;
+  summary: string;
+  promptRef?: string;
+  action?: string;
+  skillIds: string[];
+  mcpServers: McpBinding[];
+  capabilities: string[];
+  inputs: string[];
+  outputs: string[];
+  context: string;
+  policy: string;
+  sandbox: string;
+}
+
+export interface PipelineDefinition {
+  protocol: string;
+  packageName: string;
+  displayName: string;
+  version: string;
+  source: string;
+  digest: string;
+  entrypoint: string;
+  installedAt: string;
+  contextPolicy: string;
+  nodes: NodeDefinition[];
+  edges: Array<{ from: string; to: string; when?: string; loop?: { maxIterations: number; onExhausted: string } }>;
 }

@@ -1,0 +1,109 @@
+protocol: agent-pipeline.dev/v1alpha1
+kind: Pipeline
+metadata:
+  id: product-delivery
+  displayName: 研发任务交付
+inputs:
+  task: { type: string, required: true }
+  attachments: { type: artifact-list, required: false }
+context:
+  default: run-brief-and-direct-dependencies
+  allowManualAttachments: true
+nodes:
+  - id: grill
+    type: agent
+    title: Grill
+    prompt: ../prompts/grill.md
+    skills: [grill-with-docs]
+    capabilities: [artifact.publish, activity.publish]
+    outputs:
+      grill-record: { schema: ../schemas/markdown-artifact.json, required: true }
+  - id: ticket
+    type: action
+    title: Ticket
+    action: ticket.create
+    skills: [to-ticket]
+    mcp:
+      - { name: Requirement Hub, transport: http, tools: [ticket.create, ticket.link], permission: write }
+    capabilities: [ticket.write]
+    outputs:
+      ticket-reference: { schema: ../schemas/reference-artifact.json, required: true }
+  - id: spec
+    type: agent
+    title: Spec
+    prompt: ../prompts/spec.md
+    skills: [to-spec]
+    mcp:
+      - { name: Code Search, transport: stdio, tools: [search, symbols], permission: read }
+    capabilities: [workspace.read, artifact.publish, activity.publish]
+    outputs:
+      technical-spec: { schema: ../schemas/markdown-artifact.json, required: true }
+  - id: implement
+    type: agent
+    title: Implement
+    prompt: ../prompts/implement.md
+    skills: [implement, tdd]
+    mcp:
+      - { name: Code Search, transport: stdio, tools: [search, symbols], permission: read }
+    sandbox: { worktree: optional }
+    capabilities: [workspace.read, workspace.write, process.git, process.test, artifact.publish, activity.publish]
+    outputs:
+      patch: { schema: ../schemas/patch-artifact.json, required: true }
+      test-report: { schema: ../schemas/test-report-artifact.json, required: true }
+  - id: review
+    type: gate
+    title: Review
+    prompt: ../prompts/review.md
+    skills: [code-review]
+    decisionSchema:
+      outcomes: [approved, changes_requested]
+      reasonRequired: true
+    outputs:
+      review-report: { schema: ../schemas/markdown-artifact.json, required: true }
+  - id: deploy
+    type: action
+    title: Deploy
+    action: environment.deploy
+    skills: [deploy]
+    mcp:
+      - name: OCM Test Environment
+        transport: http
+        tools: [environment.inspect, deployment.create, deployment.status]
+        permission: deploy
+    capabilities: [environment.deploy]
+    approval: high-risk
+    outputs:
+      deployment-receipt: { schema: ../schemas/reference-artifact.json, required: true }
+  - id: smoke
+    type: agent
+    title: Smoke Test
+    prompt: ../prompts/smoke.md
+    skills: [smoke-test]
+    mcp:
+      - { name: OCM Test Environment, transport: http, tools: [environment.read, logs.query], permission: read }
+    capabilities: [environment.read, process.test, artifact.publish, activity.publish]
+    outputs:
+      smoke-report: { schema: ../schemas/test-report-artifact.json, required: true }
+edges:
+  - { from: grill, to: ticket }
+  - { from: ticket, to: spec }
+  - { from: spec, to: implement }
+  - { from: implement, to: review }
+  - { from: review, to: deploy, when: approved }
+  - from: review
+    to: implement
+    when: changes_requested
+    handoff: [review-report, technical-spec, patch, test-report]
+    loop:
+      max_iterations: 3
+      on_exhausted: attention
+  - { from: deploy, to: smoke }
+policies:
+  failure: attention
+  timeout: 45m
+  retry: { maxAttempts: 2, backoff: exponential }
+deliverySlots:
+  - { id: discovery, title: 需求与决策, accepts: [grill-record, ticket-reference] }
+  - { id: design, title: 技术方案, accepts: [technical-spec] }
+  - { id: implementation, title: 实现与验证, accepts: [patch, test-report, review-report] }
+  - { id: release, title: 部署与冒烟, accepts: [deployment-receipt, smoke-report] }

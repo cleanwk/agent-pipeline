@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"Patch Artifact","type":"object","required":["base","head","diff"],"properties":{"base":{"type":"string"},"head":{"type":"string"},"diff":{"type":"string"},"summary":{"type":"string"}}}

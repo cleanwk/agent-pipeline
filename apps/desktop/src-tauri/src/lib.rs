@@ -1,7 +1,9 @@
 use std::{path::PathBuf, process::Command as ProcessCommand};
 
 use agent_pipeline_core::{Command, RunProjection};
-use agent_pipeline_runner::{InstalledPackage, PiRpcAdapter, RunnerClient, ensure_runner};
+use agent_pipeline_runner::{
+    InstalledPackage, PackageInspection, PiRpcAdapter, RunnerClient, ensure_runner,
+};
 use serde::Serialize;
 use tauri::{Manager, State};
 
@@ -24,6 +26,7 @@ struct AgentProbe {
 #[derive(Serialize)]
 struct Bootstrap {
     run: RunProjection,
+    definition: PackageInspection,
     agents: Vec<AgentProbe>,
     native: bool,
 }
@@ -31,8 +34,19 @@ struct Bootstrap {
 #[tauri::command]
 fn bootstrap(state: State<'_, AppState>) -> std::result::Result<Bootstrap, String> {
     let run = state.runner.snapshot().map_err(|error| error.to_string())?;
+    let definition = state
+        .runner
+        .inspect_installed_package(&run.definition_package, &run.definition_version)
+        .map_err(|error| error.to_string())?;
+    if definition.digest != run.definition_digest {
+        return Err(format!(
+            "Pipeline definition integrity check failed: Run expects {}, installed Package is {}",
+            run.definition_digest, definition.digest
+        ));
+    }
     Ok(Bootstrap {
         run,
+        definition,
         agents: probe_agents(),
         native: true,
     })
@@ -54,18 +68,46 @@ fn install_package(
     source_path: String,
     state: State<'_, AppState>,
 ) -> std::result::Result<InstalledPackage, String> {
-    let source_path = if let Some(relative) = source_path.strip_prefix("~/") {
-        std::env::var_os("HOME")
-            .map(PathBuf::from)
-            .ok_or_else(|| "HOME is unavailable".to_string())?
-            .join(relative)
-    } else {
-        PathBuf::from(source_path)
-    };
+    let source_path = expand_home(source_path)?;
     state
         .runner
         .install_package(source_path)
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn inspect_package(
+    source_path: String,
+    state: State<'_, AppState>,
+) -> std::result::Result<PackageInspection, String> {
+    let source_path = expand_home(source_path)?;
+    state
+        .runner
+        .inspect_package(source_path)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn inspect_installed_package(
+    name: String,
+    version: String,
+    state: State<'_, AppState>,
+) -> std::result::Result<PackageInspection, String> {
+    state
+        .runner
+        .inspect_installed_package(name, version)
+        .map_err(|error| error.to_string())
+}
+
+fn expand_home(source_path: String) -> std::result::Result<PathBuf, String> {
+    if let Some(relative) = source_path.strip_prefix("~/") {
+        std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .ok_or_else(|| "HOME is unavailable".to_string())
+            .map(|home| home.join(relative))
+    } else {
+        Ok(PathBuf::from(source_path))
+    }
 }
 
 fn probe_agents() -> Vec<AgentProbe> {
@@ -168,13 +210,20 @@ pub fn run() {
                 &app_dir.join("runner-v1.sock"),
                 &app_dir.join("pipeline.db"),
             )?;
+            let bundled_package = app
+                .path()
+                .resource_dir()?
+                .join("resources/seven-stage-product-delivery");
+            runner.install_package(&bundled_package)?;
             app.manage(AppState { runner });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             bootstrap,
             dispatch,
-            install_package
+            install_package,
+            inspect_package,
+            inspect_installed_package
         ])
         .run(tauri::generate_context!())
         .expect("error while running Agent Pipeline");

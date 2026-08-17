@@ -34,6 +34,10 @@ nodes:
   - id: work
     type: agent
     prompt: ../prompts/run.md
+    skills: [tdd]
+    mcp:
+      - { name: Code Search, transport: stdio, tools: [search], permission: read }
+    capabilities: [workspace.read, artifact.publish]
     outputs:
       result: { schema: ../schemas/output.json }
 edges: []
@@ -44,6 +48,9 @@ edges: []
     let package = LoadedPackage::load(directory.path()).unwrap();
     assert_eq!(package.manifest.metadata.name, "example");
     assert_eq!(package.pipelines[0].entry, "work");
+    assert_eq!(package.pipelines[0].nodes[0].skills, ["tdd"]);
+    assert_eq!(package.pipelines[0].nodes[0].mcp.len(), 1);
+    assert_eq!(package.pipelines[0].nodes[0].capabilities.len(), 2);
 }
 
 #[test]

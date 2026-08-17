@@ -71,6 +71,14 @@ struct PipelineDocument {
     entry: Option<String>,
     nodes: Vec<NodeDefinition>,
     edges: Vec<EdgeDefinition>,
+    #[serde(default)]
+    inputs: serde_yaml::Value,
+    #[serde(default)]
+    context: serde_yaml::Value,
+    #[serde(default)]
+    policies: serde_yaml::Value,
+    #[serde(default, rename = "deliverySlots")]
+    delivery_slots: Vec<serde_yaml::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -122,6 +130,10 @@ impl LoadedPackage {
                 entry,
                 nodes: document.nodes,
                 edges: document.edges,
+                inputs: document.inputs,
+                context: document.context,
+                policies: document.policies,
+                delivery_slots: document.delivery_slots,
             };
             validate_pipeline(&pipeline)?;
             pipelines.push(pipeline);
@@ -202,6 +214,14 @@ pub struct PipelineDefinition {
     pub entry: String,
     pub nodes: Vec<NodeDefinition>,
     pub edges: Vec<EdgeDefinition>,
+    #[serde(default)]
+    pub inputs: serde_yaml::Value,
+    #[serde(default)]
+    pub context: serde_yaml::Value,
+    #[serde(default)]
+    pub policies: serde_yaml::Value,
+    #[serde(default, rename = "deliverySlots")]
+    pub delivery_slots: Vec<serde_yaml::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -209,6 +229,28 @@ pub struct NodeDefinition {
     pub id: String,
     #[serde(rename = "type")]
     pub node_type: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub prompt: Option<PathBuf>,
+    #[serde(default)]
+    pub action: Option<String>,
+    #[serde(default)]
+    pub skills: Vec<String>,
+    #[serde(default)]
+    pub mcp: Vec<serde_yaml::Value>,
+    #[serde(default)]
+    pub capabilities: Vec<String>,
+    #[serde(default)]
+    pub inputs: serde_yaml::Value,
+    #[serde(default)]
+    pub outputs: serde_yaml::Value,
+    #[serde(default)]
+    pub sandbox: serde_yaml::Value,
+    #[serde(default)]
+    pub approval: Option<String>,
+    #[serde(default, rename = "decisionSchema")]
+    pub decision_schema: serde_yaml::Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -218,11 +260,16 @@ pub struct EdgeDefinition {
     pub when: Option<String>,
     #[serde(rename = "loop")]
     pub loop_policy: Option<LoopPolicy>,
+    #[serde(default)]
+    pub handoff: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LoopPolicy {
+    #[serde(alias = "max_iterations")]
     pub max_iterations: u32,
+    #[serde(alias = "on_exhausted")]
     pub on_exhausted: String,
 }
 
@@ -425,6 +472,24 @@ pub struct RunProjection {
     pub selected_node_id: String,
     #[serde(default)]
     pub event_count: u64,
+    #[serde(default = "default_definition_package")]
+    pub definition_package: String,
+    #[serde(default = "default_definition_version")]
+    pub definition_version: String,
+    #[serde(default = "default_definition_digest")]
+    pub definition_digest: String,
+}
+
+fn default_definition_package() -> String {
+    "seven-stage-product-delivery".into()
+}
+
+fn default_definition_version() -> String {
+    "0.2.0".into()
+}
+
+fn default_definition_digest() -> String {
+    "sha256:c54ba184fbdd7530db90e79a0ee9cb7f8c72c6d94612c448e0f0206419e18708".into()
 }
 
 impl RunProjection {
@@ -996,5 +1061,8 @@ fn demo_projection() -> RunProjection {
         ],
         brief: "退款能力已完成需求澄清、Ticket 与技术方案。Implement Attempt 1 已发布实现与测试结果；Review 正等待确认异步退款幂等边界。".into(),
         selected_node_id: "review".into(), event_count: 0,
+        definition_package: default_definition_package(),
+        definition_version: default_definition_version(),
+        definition_digest: default_definition_digest(),
     }
 }
