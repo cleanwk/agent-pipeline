@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { ArrowUpRight, Braces, FileText, GitCommitHorizontal, ScrollText, TerminalSquare, X } from "@lucide/vue";
-import type { Artifact, PipelineNode } from "../types";
+import { ArrowUpRight, Braces, FileText, GitCommitHorizontal, Layers3, PlugZap, ScrollText, TerminalSquare, X } from "@lucide/vue";
+import type { Artifact, NodeDefinition, PipelineNode } from "../types";
 import StatusMark from "./StatusMark.vue";
 
-const props = withDefaults(defineProps<{ node: PipelineNode; artifacts: Artifact[]; busy: boolean; focused?: boolean }>(), { focused: false });
-const emit = defineEmits<{ requestChanges: [reason: string]; approve: []; advance: []; focus: []; closeFocus: [] }>();
+const props = withDefaults(defineProps<{ node: PipelineNode; definition: NodeDefinition; artifacts: Artifact[]; busy: boolean; focused?: boolean }>(), { focused: false });
+const emit = defineEmits<{ requestChanges: [reason: string]; approve: []; advance: []; focus: []; closeFocus: []; showDefinition: [] }>();
 const activeTab = ref<"overview" | "activity" | "artifacts" | "logs">("overview");
 const reason = ref("异步退款必须校验幂等键，并补充重复请求回放测试");
 const nodeArtifacts = computed(() => props.artifacts.filter((artifact) => artifact.producerNodeId === props.node.id));
@@ -34,6 +34,12 @@ watch(() => props.node.id, () => { activeTab.value = "overview"; });
           <h3>执行环境</h3>
           <dl><dt>Runtime</dt><dd>{{ node.runtime }}</dd><dt>类型</dt><dd>{{ node.kind }}</dd><dt>Attempt</dt><dd>{{ node.attempt || '尚未创建' }}</dd></dl>
         </section>
+        <section class="inspection-block capability-summary">
+          <h3>Node 能力</h3>
+          <div><span><Braces :size="14" />{{ definition.skillIds.length }} Skills</span><span><PlugZap :size="14" />{{ definition.mcpServers.length }} MCP</span></div>
+          <p>{{ definition.capabilities.slice(0, 3).join(' · ') }}<template v-if="definition.capabilities.length > 3"> · +{{ definition.capabilities.length - 3 }}</template></p>
+          <button class="secondary-action wide" @click="emit('showDefinition')"><Layers3 :size="15" />查看完整定义与权限</button>
+        </section>
         <section v-if="node.id === 'review'" class="inspection-block diff-block">
           <h3>Diff 预览</h3>
           <p>refund_service.rs → refund_service.rs</p>
@@ -61,14 +67,14 @@ watch(() => props.node.id, () => { activeTab.value = "overview"; });
       <section v-else-if="activeTab === 'activity'" class="activity-timeline">
         <div v-for="activity in node.activities" :key="activity.id" class="timeline-row">
           <StatusMark :status="activity.status" />
-          <div><strong>{{ activity.title }}</strong><span>{{ activity.detail }}</span><time>{{ activity.time }}</time></div>
+          <div><header><strong>{{ activity.title }}</strong><time>{{ activity.time }}</time></header><span>{{ activity.detail }}</span></div>
         </div>
         <div v-if="node.activities.length === 0" class="inspector-empty"><Braces :size="22" />节点开始后，模型发布的旁路 Activity 会出现在这里。</div>
       </section>
 
       <section v-else-if="activeTab === 'artifacts'" class="artifact-list">
         <article v-for="artifact in nodeArtifacts" :key="artifact.id" class="artifact-row">
-          <FileText :size="18" /><div><strong>{{ artifact.title }}</strong><span>{{ artifact.mediaType }} · rev {{ artifact.revision }} · {{ artifact.size }}</span><p>{{ artifact.summary }}</p></div><ArrowUpRight :size="15" />
+          <FileText :size="18" /><div><strong>{{ artifact.title }}</strong><span>{{ artifact.mediaType }} · rev {{ artifact.revision }} · {{ artifact.size }}</span><p>{{ artifact.summary }}</p></div>
         </article>
         <div v-if="nodeArtifacts.length === 0" class="inspector-empty"><FileText :size="22" />这个 Node 还没有发布正式 Artifact。</div>
       </section>

@@ -1,0 +1,10 @@
+protocol: agent-pipeline.dev/v1alpha1
+kind: PipelinePackage
+metadata:
+  name: seven-stage-product-delivery
+  displayName: 七阶段研发交付
+  version: 0.2.0
+  description: 从需求澄清到冒烟验证的可恢复 Agent Pipeline
+  license: Apache-2.0
+pipelines:
+  - path: pipelines/product-delivery.yaml

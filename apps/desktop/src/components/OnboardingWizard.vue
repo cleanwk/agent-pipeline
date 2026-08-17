@@ -45,7 +45,7 @@ const readyCount = computed(() => props.agents.filter((agent) => agent.state ===
       </div>
       <div v-else-if="step === 4" class="onboarding-panel">
         <span class="panel-symbol"><FolderGit2 :size="32" /></span><h1>选择第一个 Workspace</h1><p>Workspace 是项目、能力目录与默认 Policy 的稳定边界；每次 Run 会冻结它的环境快照。</p>
-        <label class="workspace-field"><span>Repository root</span><input v-model="workspace" /><button aria-label="选择目录">…</button></label>
+        <label class="workspace-field"><span>Repository root</span><input v-model="workspace" /><button aria-label="使用当前示例目录" title="MVP 使用已验证的本地示例目录" @click.prevent="workspace = '~/github/agent-pipeline-example'">…</button></label>
         <div class="workspace-summary"><span>默认 Runtime</span><strong>Pi · RPC</strong><span>Execution sandbox</span><strong>Existing repo，可按 Node 切 worktree</strong></div>
       </div>
       <div v-else class="onboarding-panel ready-panel">
