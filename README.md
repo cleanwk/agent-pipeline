@@ -56,6 +56,12 @@ brew install --cask cleanwk/tap/agent-pipeline
 
 安装后的 App 会在启动时检查 GitHub Release 中经过签名的更新；也可从右上角“更多 → 检查版本更新”手动检查，并在 App 内完成下载、验证、安装和重启。发布仓库需要配置 `TAURI_SIGNING_PRIVATE_KEY`、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 和对应的 `TAURI_UPDATER_PUBLIC_KEY`，Release workflow 会生成供客户端读取的 `latest.json` 与签名更新包。源码开发配置中的 `__TAURI_UPDATER_PUBLIC_KEY__` 只作为占位符，正式构建会由 workflow 替换，私钥不得提交到仓库。
 
+## 发布新版本
+
+运行 `pnpm release:version <版本号>`（例如 `pnpm release:version 0.2.0`），检查生成的版本改动后提交并推送到 `main`。脚本会同步根项目、桌面端、Tauri 和 Rust workspace 的版本；`VERSION` 的变更会自动触发 GitHub Actions，在 macOS runner 上构建、Developer ID 签名并公证 Apple Silicon DMG，然后创建 `v<版本号>` GitHub Release。用户可以直接从该 Release 下载 DMG 安装。
+
+仓库需要预先配置 `APPLE_CERTIFICATE`、`APPLE_CERTIFICATE_PASSWORD`、`APPLE_SIGNING_IDENTITY`、`APPLE_ID`、`APPLE_PASSWORD`、`APPLE_TEAM_ID` 以及上述 Tauri updater secrets。工作流会拒绝覆盖已经存在的版本 Tag，失败后应发布一个新版本号。
+
 ## Design and architecture
 
 - [Product contract](PRODUCT.md)

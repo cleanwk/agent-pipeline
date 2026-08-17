@@ -1,8 +1,9 @@
-name: Release
+name: Release macOS DMG
 
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+    paths: [VERSION]
   workflow_dispatch:
 
 permissions:
@@ -17,6 +18,8 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           version: 10.29.3
@@ -40,15 +43,22 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
         shell: bash
         run: |
-          version="$(node -p "require('./package.json').version")"
-          test "${GITHUB_REF_TYPE}" != "tag" || test "${GITHUB_REF_NAME}" = "v${version}"
-          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID HOMEBREW_TAP_TOKEN TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD TAURI_UPDATER_PUBLIC_KEY; do
+          version="$(tr -d '[:space:]' < VERSION)"
+          test -n "$version"
+          test "$(node -p "require('./package.json').version")" = "$version"
+          test "$(node -p "require('./apps/desktop/package.json').version")" = "$version"
+          test "$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")" = "$version"
+          grep -Fqx "version = \"$version\"" Cargo.toml
+          if git rev-parse "refs/tags/v${version}" >/dev/null 2>&1; then
+            echo "Tag v${version} already exists; refusing to overwrite an immutable release." >&2
+            exit 1
+          fi
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD TAURI_UPDATER_PUBLIC_KEY; do
             test -n "${!name}" || { echo "Missing required release secret: ${name}" >&2; exit 1; }
           done
           echo "version=${version}" >> "$GITHUB_OUTPUT"
@@ -57,17 +67,16 @@ jobs:
         env:
           TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
         run: |
-          python3 - <<'PY'
-          import json, os
-          path = "apps/desktop/src-tauri/tauri.conf.json"
-          with open(path) as source:
-              config = json.load(source)
-          config["plugins"]["updater"]["pubkey"] = os.environ["TAURI_UPDATER_PUBLIC_KEY"]
-          with open(path, "w") as destination:
-              json.dump(config, destination, indent=2)
-          PY
+          node - <<'NODE'
+          const fs = require("node:fs");
+          const path = "apps/desktop/src-tauri/tauri.conf.json";
+          const config = JSON.parse(fs.readFileSync(path, "utf8"));
+          config.plugins.updater.pubkey = process.env.TAURI_UPDATER_PUBLIC_KEY;
+          fs.writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`);
+          NODE
 
-      - uses: tauri-apps/tauri-action@v1
+      - name: Build, sign, notarize, and publish DMG
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -81,40 +90,7 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: Agent Pipeline v__VERSION__
-          releaseBody: Local-first Agent pipeline Mission Control for macOS Apple Silicon.
+          releaseBody: Download the Apple Silicon DMG below and drag Agent Pipeline into Applications.
           generateReleaseNotes: true
           releaseDraft: false
           args: --target aarch64-apple-darwin
-
-      - name: Checkout Homebrew tap
-        uses: actions/checkout@v6
-        with:
-          repository: cleanwk/homebrew-tap
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          path: homebrew-tap
-
-      - name: Update Homebrew cask
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        shell: bash
-        run: |
-          dmg="$(find target/aarch64-apple-darwin/release/bundle/dmg -name '*.dmg' -print -quit)"
-          test -n "$dmg"
-          sha256="$(shasum -a 256 "$dmg" | awk '{print $1}')"
-          mkdir -p homebrew-tap/Casks
-          test -f homebrew-tap/Casks/agent-pipeline.rb || cp packaging/homebrew/agent-pipeline.rb homebrew-tap/Casks/agent-pipeline.rb
-          VERSION="$VERSION" SHA256="$sha256" ruby -pi -e 'gsub(/^  version .*/, "  version \"#{ENV.fetch("VERSION")}\""); gsub(/^  sha256 .*/, "  sha256 \"#{ENV.fetch("SHA256")}\"")' homebrew-tap/Casks/agent-pipeline.rb
-
-      - name: Validate and publish Homebrew cask
-        working-directory: homebrew-tap
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          brew style --cask Casks/agent-pipeline.rb
-          brew audit --new --cask Casks/agent-pipeline.rb
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add Casks/agent-pipeline.rb
-          git diff --cached --quiet && exit 0
-          git commit -m "agent-pipeline ${VERSION}"
-          git push

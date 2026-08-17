@@ -13,6 +13,7 @@
     "typecheck": "pnpm --dir apps/desktop typecheck",
     "tauri": "pnpm --dir apps/desktop tauri",
     "tauri:dev": "pnpm --dir apps/desktop tauri dev",
-    "tauri:build": "pnpm --dir apps/desktop tauri build --target aarch64-apple-darwin"
+    "tauri:build": "pnpm --dir apps/desktop tauri build --target aarch64-apple-darwin",
+    "release:version": "node scripts/set-version.mjs"
   }
 }
