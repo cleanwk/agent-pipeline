@@ -58,9 +58,9 @@ brew install --cask cleanwk/tap/agent-pipeline
 
 ## 发布新版本
 
-运行 `pnpm release:version <版本号>`（例如 `pnpm release:version 0.2.0`），检查生成的版本改动后提交并推送到 `master`。脚本会同步根项目、桌面端、Tauri 和 Rust workspace 的版本；只有 `master` 上的 `VERSION` 发生变化时才会触发 GitHub Actions。工作流在 macOS runner 上构建 Apple Silicon DMG，先创建草稿 Release，再验证 Developer ID 签名、公证票据、Gatekeeper 结果、DMG 完整性和应用图标；全部通过后才公开 `v<版本号>` Release。普通开发提交不会触发发布构建；常规 CI 仅在 Pull Request 或手动触发时运行。
+运行 `pnpm release:version <版本号>`（例如 `pnpm release:version 0.2.0`），检查生成的版本改动后提交并推送到 `master`。脚本会同步根项目、桌面端、Tauri 和 Rust workspace 的版本；只有 `master` 上的 `VERSION` 发生变化时才会触发 GitHub Actions。仓库只保留 Release 工作流：它在 macOS runner 上构建 Apple Silicon DMG 和应用内更新包，先创建草稿 Release，再验证代码签名、DMG 完整性和应用图标；全部通过后才公开 `v<版本号>` Release。PR 和普通开发提交不会运行 GitHub CI，本地提交前按需执行 `pnpm test`。
 
-公开 macOS Release 必须配置 `APPLE_CERTIFICATE`、`APPLE_CERTIFICATE_PASSWORD`、`APPLE_SIGNING_IDENTITY`、`APPLE_ID`、`APPLE_PASSWORD`、`APPLE_TEAM_ID`；缺少任意一项时工作流会在构建前失败，绝不会再发布无法通过 Gatekeeper 的未签名 DMG。Tauri updater 的 `TAURI_SIGNING_PRIVATE_KEY`、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`、`TAURI_UPDATER_PUBLIC_KEY` 仍为可选，但一旦启用就必须完整配置。工作流会拒绝覆盖已经公开的版本 Tag，失败后应发布一个新版本号。
+Tauri updater 的 `TAURI_SIGNING_PRIVATE_KEY`、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`、`TAURI_UPDATER_PUBLIC_KEY` 必须完整配置，以保证每个 Release 都能被应用内更新器验证。Apple Developer ID secrets 为可选配置：完整配置时工作流会执行 Developer ID 签名与公证；未配置时使用完整的 ad-hoc 签名，适合开发自用，但首次启动可能需要在 macOS“隐私与安全性”中选择“仍要打开”。工作流会拒绝覆盖已经公开的版本 Tag，失败后应发布一个新版本号。
 
 ## Design and architecture
 
