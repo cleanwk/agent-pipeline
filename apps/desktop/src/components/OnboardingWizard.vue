@@ -49,10 +49,10 @@ const readyCount = computed(() => props.agents.filter((agent) => agent.state ===
         <div class="workspace-summary"><span>默认 Runtime</span><strong>Pi · RPC</strong><span>Execution sandbox</span><strong>Existing repo，可按 Node 切 worktree</strong></div>
       </div>
       <div v-else class="onboarding-panel ready-panel">
-        <span class="panel-symbol success"><Check :size="34" /></span><h1>控制台已经准备好</h1><p>七阶段示例 Pipeline 已随 App 安装。你会先看到一个停在 Review Gate 的合成 Run，用它体验 Graph、Attention、Attempt feedback 与 Artifact。</p>
-        <div class="ready-route"><span>Grill</span><ChevronRight :size="15" /><span>Ticket</span><ChevronRight :size="15" /><span>Spec</span><ChevronRight :size="15" /><span>Implement</span><ChevronRight :size="15" /><span class="highlight">Review</span><ChevronRight :size="15" /><span>Deploy</span><ChevronRight :size="15" /><span>Smoke</span></div>
+        <span class="panel-symbol success"><Check :size="34" /></span><h1>启动台已经准备好</h1><p>接下来选择 Workspace、Agent Plugin 与 Runtime，再用自然语言描述 Mission。Graph 只在启动后显示运行事实。</p>
+        <div class="ready-route"><span>Workspace</span><ChevronRight :size="15" /><span>Agent Plugin</span><ChevronRight :size="15" /><span>Runtime</span><ChevronRight :size="15" /><span class="highlight">Mission</span></div>
       </div>
-      <footer class="onboarding-actions"><span>{{ step }} / 5</span><button v-if="step > 1" class="text-action" @click="step--">返回</button><button class="primary-action" @click="step < 5 ? step++ : emit('complete')">{{ step < 5 ? '继续' : '进入 Mission Control' }}<ArrowRight :size="16" /></button></footer>
+      <footer class="onboarding-actions"><span>{{ step }} / 5</span><button v-if="step > 1" class="text-action" @click="step--">返回</button><button class="primary-action" @click="step < 5 ? step++ : emit('complete')">{{ step < 5 ? '继续' : '返回启动台' }}<ArrowRight :size="16" /></button></footer>
     </section>
   </main>
 </template>

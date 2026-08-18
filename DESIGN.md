@@ -110,7 +110,7 @@ The product is not a generic dashboard, a low-code builder, or a Dify-style drag
 
 - Dense but quiet macOS desktop tooling; warm technical paper rather than SaaS chrome.
 - Fine rules, restrained radii, compact controls, tabular metadata, and sparse elevation.
-- Attention first, Graph dominant, Inspector fixed; Node Focus is the deliberate deep-reading mode.
+- Mission Launcher first, then Attention first and Graph dominant after launch; Node Focus is the deliberate deep-reading mode.
 - Immutable attempts and revisions stay visible. New facts append; old facts fade into history but never disappear.
 
 ## Colors
@@ -154,7 +154,9 @@ Use the native macOS sans stack for the application and SF Mono-compatible faces
 
 ## Layout
 
-The Run first viewport is invariant: a `42px` native titlebar, a `72px` command bar, then three full-height columns—Attention (`224px`), Graph (`minmax(540px, 1fr)`), and fixed Inspector (`336px`). The center Graph owns the visual field; side rails support it and scroll independently. The Graph uses a `28px` drafting grid and a stable stage, so causality does not jump as events arrive. Node subtasks live in a dedicated Activity lane below the topology; they never resize a node into the history band.
+The App opens on Mission Launcher: a quiet setup surface that freezes Workspace, Agent Plugin, Runtime, and natural-language Mission before any Run exists. It must not display a pre-filled Graph or imply that a model request was sent. The Launcher uses one continuous ruled form plus a fixed Mission Snapshot; it is not a dashboard-card grid.
+
+After launch, the Run first viewport is invariant: a `42px` native titlebar, a `72px` command bar, then three full-height columns—Attention (`224px`), Graph (`minmax(540px, 1fr)`), and fixed Inspector (`336px`). The center Graph owns the visual field; side rails support it and scroll independently. The Graph uses a `28px` drafting grid and a stable stage, so causality does not jump as events arrive. Node subtasks live in a dedicated Activity lane below the topology; they never resize a node into the history band.
 
 Node Focus is a state change, not a modal: hide Attention and Graph, then center the Inspector as a paper sheet up to `920px` wide with `28px` vertical breathing room. Preserve its tabs, facts, and actions so focus feels like zooming into the same Node.
 
@@ -183,6 +185,7 @@ Borders are normally `1px`; an active attention node may strengthen to `1.5px`. 
 ## Components
 
 - **Titlebar and command bar:** native drag surface above a paper command strip. Keep Runner health visible, theme selection compact, and icon buttons labeled. Active view uses a subtle ink wash, not a saturated tab.
+- **Mission Launcher:** the default entry surface. Ask for Workspace, Agent Plugin, Runtime, and Mission in that order, then show a compact frozen snapshot before launch. A Plugin exposes Skills, tools/MCP, output contracts, and permissions; Graph remains absent until a Run exists. Demo adapters must be named as demos and state that no Prompt or model cost occurred.
 - **Attention Rail:** fixed intervention queue with icon, title, evidence summary, and time. Selected rows gain an attention wash plus a `2px` leading rule. The empty state says execution can continue; it is not a celebration card.
 - **Run Graph:** the primary navigation and explanation surface. Nodes are data-derived technical plates with index, status mark, title, state, and time. Edges express causality; selected-node Activity projects into a separate lane without changing Graph geometry.
 - **Pipeline Definition:** an immutable, inspectable projection of the Package used by the Run. It exposes source, protocol, digest, Node prompt/action, contracts, context policy, sandbox, Skill bindings, exact MCP tool grants, and capabilities. Configuration stays natural-language; model edits create a proposal for a new version rather than mutating the frozen Run.
@@ -192,7 +195,7 @@ Borders are normally `1px`; an active attention node may strengthen to `1.5px`. 
 - **Buttons and fields:** primary is blueprint blue with white text; secondary is transparent with a strong rule; text action is muted. All controls use visible hover and `2px` focus-visible outlines with `2px` offset. Disabled async actions keep their label and show waiting through copy plus reduced opacity.
 - **Deliverables:** formal Artifact revisions only—title, revision, summary, media/size/time, producer Node, and Attempt. Group by delivery slot and keep export secondary. Logs, temporary files, and full transcripts do not masquerade as deliverables.
 - **Authoring:** natural-language intent on the left; inspectable Package Proposal on the right. Show the proposed mini-Graph, bounded loops, files, permissions, validation, source, and install state. The result is a real text package, never private canvas state.
-- **Onboarding and Doctor:** a five-step, light drafting-table sequence: local boundary, host check, Agent discovery, Workspace, ready. Maintain the persistent step index and local-data promise. Doctor re-enters the Agent discovery/check flow and reports installation, version, authentication, and protocol capability separately. Checks are read-only, make no model request, and state external Runtime/network boundaries plainly.
+- **Onboarding and Doctor:** Doctor is an optional five-step, light drafting-table sequence: local boundary, host check, Agent discovery, Workspace, ready. Completion returns to Mission Launcher rather than fabricating a Run. Maintain the persistent step index and local-data promise. Doctor re-enters the Agent discovery/check flow and reports installation, version, authentication, and protocol capability separately. Checks are read-only, make no model request, and state external Runtime/network boundaries plainly.
 
 ## Do's and Don'ts
 

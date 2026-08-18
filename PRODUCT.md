@@ -20,7 +20,7 @@ Rust、Tauri 2 与 Vue 3。首发运行环境为近三年内的 macOS，仅支�
 
 ## Positioning
 
-它不是低代码流程画布，也不重新实现 Agent 的推理和上下文系统。用户通过自然语言让模型创建和修改 Pipeline；产品以高质量 Graph、Activity、Timeline、Artifact 和恢复交互把 Agent 原本不可见、易丢失的长任务变成耐久的应用体验。
+它不是低代码流程画布，也不重新实现 Agent 的推理和上下文系统。产品从 Workspace、Agent Plugin、Runtime 与自然语言 Mission 开始；Run 启动后才以高质量 Graph、Activity、Timeline、Artifact 和恢复交互，把 Agent 原本不可见、易丢失的长任务变成耐久的应用体验。
 
 ## Operating Context
 
@@ -33,6 +33,7 @@ Rust、Tauri 2 与 Vue 3。首发运行环境为近三年内的 macOS，仅支�
 - Host App 与 Pipeline Package 分离，并交付一个独立的七阶段示例 Package。
 - Host App 与七阶段示例分别发布为公开 GitHub 仓库 `cleanwk/agent-pipeline` 与 `cleanwk/agent-pipeline-example`，许可证均为 Apache-2.0。
 - Package 使用公开、文本化、可版本化的协议，可以包含多个 Pipeline 和共享资源。
+- App 默认进入 Mission Launcher，按 Workspace → Agent Plugin → Runtime → Mission 冻结启动参数；不存在 Run 时不展示预置 Graph。
 - Pipeline Authoring Skill 根据自然语言或现有资料生成、校验、测试并安装 Package；Graph 只用于解释、导航和审查，不提供拖拽编排。
 - Pipeline Run 冻结定义、依赖与配置；运行历史、Attempt、Artifact Revision 和事件只追加、不覆盖。
 - Agent Runtime 拥有 Session 内上下文、压缩和原生恢复；跨节点通过 Handoff、Run Brief、Artifact 和用户附件交接。
