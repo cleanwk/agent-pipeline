@@ -14,6 +14,8 @@ import { demoAgents, demoRun } from "./demo";
 import { demoDefinition } from "./definition";
 import type { AgentProbe, PipelineDefinition, RunProjection } from "./types";
 import AttentionRail from "./components/AttentionRail.vue";
+import MissionLauncher from "./components/MissionLauncher.vue";
+import type { MissionLaunchRequest } from "./components/MissionLauncher.vue";
 import NodeInspector from "./components/NodeInspector.vue";
 import OnboardingWizard from "./components/OnboardingWizard.vue";
 import PipelineDefinitionView from "./components/PipelineDefinitionView.vue";
@@ -21,14 +23,17 @@ import RunGraph from "./components/RunGraph.vue";
 
 type ThemeName = "system" | "draft" | "night" | "warm";
 type MainView = "run" | "definition" | "artifacts" | "author";
+type AppSurface = "launcher" | "mission";
 
 const loading = ref(true);
 const bootError = ref("");
 const busy = ref(false);
-const onboarding = ref(localStorage.getItem("agent-pipeline:onboarded") !== "true");
+const onboarding = ref(false);
 const onboardingStep = ref(1);
+const surface = ref<AppSurface>("launcher");
 const run = ref<RunProjection>(structuredClone(demoRun));
 const definition = ref<PipelineDefinition>(structuredClone(demoDefinition));
+const definitions = ref<PipelineDefinition[]>([structuredClone(demoDefinition)]);
 const agents = ref<AgentProbe[]>(structuredClone(demoAgents));
 const native = ref(false);
 const selectedNodeId = ref("review");
@@ -69,6 +74,7 @@ async function loadApp() {
     native.value = data.native;
     selectedNodeId.value = data.run.selectedNodeId || "review";
     definition.value = data.definition;
+    definitions.value = [data.definition];
     if (data.native) void checkUpdate(false);
   } catch (error) {
     bootError.value = error instanceof Error ? error.message : String(error);
@@ -106,6 +112,7 @@ async function applyUpdate() {
 function completeOnboarding() {
   localStorage.setItem("agent-pipeline:onboarded", "true");
   onboarding.value = false;
+  surface.value = "launcher";
 }
 
 function openDoctor() {
@@ -172,12 +179,49 @@ async function resetDemo() {
   mainView.value = "run";
 }
 
-async function installProposal() {
+async function launchMission(request: MissionLaunchRequest) {
+  const selected = definitions.value.find((candidate) => candidate.packageName === request.packageName && candidate.version === request.packageVersion);
+  if (!selected) {
+    notify("所选 Agent Plugin 已不可用，请重新选择。");
+    return;
+  }
+  busy.value = true;
+  try {
+    definition.value = selected;
+    const seeded = await dispatch({ resetDemo: {} });
+    const title = request.task.split("\n").map((line) => line.trim()).find(Boolean) || "Untitled Mission";
+    const workspaceParts = request.workspace.split("/").filter(Boolean);
+    seeded.title = title.length > 42 ? `${title.slice(0, 42)}…` : title;
+    seeded.workspace = workspaceParts[workspaceParts.length - 1] || request.workspace;
+    seeded.branch = `runtime/${request.runtimeId}`;
+    seeded.brief = `Demo Adapter · ${selected.displayName} · Workspace ${request.workspace}。当前 Run 为合成运行事实，不会向 ${request.runtimeId} 发送 Prompt。`;
+    run.value = seeded;
+    selectedNodeId.value = seeded.selectedNodeId || seeded.nodes[0]?.id || "";
+    mainView.value = "run";
+    surface.value = "mission";
+  } catch (error) {
+    notify(`无法打开 Demo Mission：${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    busy.value = false;
+  }
+}
+
+function returnToLauncher() {
+  nodeFocused.value = false;
+  helpOpen.value = false;
+  moreOpen.value = false;
+  surface.value = "launcher";
+}
+
+async function installProposal(sourcePath = authorPackagePath.value) {
   packageInstallState.value = "installing";
   packageInstallMessage.value = "正在验证 Graph、文件引用和有界循环…";
   try {
-    const installed = await installPackage(authorPackagePath.value);
-    definition.value = await inspectInstalledPackage(installed.name, installed.version);
+    const installed = await installPackage(sourcePath);
+    const inspected = await inspectInstalledPackage(installed.name, installed.version);
+    definition.value = inspected;
+    const key = `${inspected.packageName}@${inspected.version}`;
+    definitions.value = [...definitions.value.filter((candidate) => `${candidate.packageName}@${candidate.version}` !== key), inspected];
     packageInstallState.value = "installed";
     packageInstallMessage.value = `${installed.displayName} ${installed.version} 已安装 · ${installed.pipelineCount} Pipeline`;
   } catch (error) {
@@ -191,27 +235,40 @@ async function installProposal() {
   <div v-if="loading" class="boot-screen"><Radar class="spin" :size="28" /><span>正在连接 Local Runner</span></div>
   <div v-else-if="bootError" class="boot-screen boot-error"><Radar :size="28" /><strong>Local Runner 暂时不可用</strong><span>{{ bootError }}</span><button class="primary-action" @click="loadApp">重新连接</button></div>
   <OnboardingWizard v-else-if="onboarding" :key="onboardingStep" :agents="agents" :native="native" :initial-step="onboardingStep" @complete="completeOnboarding" />
-  <div v-else class="app-shell" :data-theme="theme">
+  <div v-else class="app-shell" :class="{ 'launcher-mode': surface === 'launcher' }" :data-theme="theme">
     <header class="app-titlebar" data-tauri-drag-region @mousedown.left="startWindowDrag" @dblclick="toggleWindowMaximize">
       <div class="drag-spacer"></div><strong>Agent Pipeline</strong>
-      <div class="titlebar-actions" @mousedown.stop @dblclick.stop><span :class="['runner-indicator', { native }]">{{ native ? 'Local Runner' : 'Preview mode' }}</span><button class="icon-button" aria-label="重新运行 Doctor" title="重新运行 Doctor" @click="openDoctor"><Settings :size="16" /></button><div class="popover-control"><button class="icon-button" aria-label="帮助" :aria-expanded="helpOpen" @click="helpOpen = !helpOpen; moreOpen = false"><CircleHelp :size="16" /></button><section v-if="helpOpen" class="utility-popover help-popover"><strong>Agent Pipeline 快速帮助</strong><p>先处理 Attention，再从 Graph 下钻 Node。Definition 解释每个阶段获得的 Skill、MCP 与权限。</p><dl><dt>Graph</dt><dd>运行状态与子任务</dd><dt>Definition</dt><dd>冻结的插件协议与能力</dd><dt>Node Focus</dt><dd>完整会话、产物与日志</dd></dl><span>全部数据留在本机；Agent 是否联网由各自 Client 决定。</span></section></div></div>
+      <div class="titlebar-actions" @mousedown.stop @dblclick.stop><span :class="['runner-indicator', { native }]">{{ native ? 'Local Runner' : 'Preview mode' }}</span><button class="icon-button" aria-label="重新运行 Doctor" title="重新运行 Doctor" @click="openDoctor"><Settings :size="16" /></button><div class="popover-control"><button class="icon-button" aria-label="帮助" :aria-expanded="helpOpen" @click="helpOpen = !helpOpen; moreOpen = false"><CircleHelp :size="16" /></button><section v-if="helpOpen" class="utility-popover help-popover"><strong>Agent Pipeline 快速帮助</strong><p>{{ surface === 'launcher' ? '先选择 Workspace、Agent Plugin 与 Runtime，再用自然语言描述 Mission。' : '先处理 Attention，再从 Graph 下钻 Node。Definition 解释每个阶段获得的 Skill、MCP 与权限。' }}</p><dl><dt>Launcher</dt><dd>冻结工作目录、能力包与 Runtime</dd><dt>Graph</dt><dd>启动后的运行事实投影</dd><dt>Node Focus</dt><dd>完整会话、产物与日志</dd></dl><span>全部数据留在本机；Agent 是否联网由各自 Client 决定。</span></section></div></div>
     </header>
+    <MissionLauncher
+      v-if="surface === 'launcher'"
+      :definitions="definitions"
+      :agents="agents"
+      :native="native"
+      :busy="busy"
+      :install-state="packageInstallState"
+      :install-message="packageInstallMessage"
+      @launch="launchMission"
+      @install="installProposal"
+      @doctor="openDoctor"
+    />
+    <template v-else>
     <nav class="command-bar">
-      <div class="run-title"><button class="brand-button" aria-label="Mission Control" @click="mainView = 'run'"><Radar :size="18" /></button><div><h1>{{ run.title }} <span :class="`run-state state-${run.status}`">{{ run.status === 'attention' ? '等待确认' : run.status === 'running' ? '运行中' : '已完成' }}</span></h1><p>Run ID: {{ run.id }}　开始时间: {{ run.startedAt }}　运行时长: {{ run.elapsed }}</p></div></div>
+      <div class="run-title"><button class="brand-button" aria-label="返回 Mission 启动台" @click="returnToLauncher"><Radar :size="18" /></button><div><h1>{{ run.title }} <span :class="`run-state state-${run.status}`">{{ run.status === 'attention' ? '等待确认' : run.status === 'running' ? '运行中' : '已完成' }}</span></h1><p>Run ID: {{ run.id }}　开始时间: {{ run.startedAt }}　运行时长: {{ run.elapsed }}</p></div></div>
       <div class="command-actions">
         <button :class="{ active: mainView === 'run' }" @click="mainView = 'run'"><GitBranch :size="15" />Graph</button>
         <button :class="{ active: mainView === 'definition' }" @click="mainView = 'definition'"><FileCode2 :size="15" />Definition</button>
         <button :class="{ active: mainView === 'artifacts' }" @click="mainView = 'artifacts'"><FileStack :size="15" />Deliverables <span>{{ run.artifacts.length }}</span></button>
         <button :class="{ active: mainView === 'author' }" @click="mainView = 'author'"><WandSparkles :size="15" />Create Preview</button>
         <div class="theme-control"><button aria-haspopup="menu" :aria-expanded="themeOpen" @click="themeOpen = !themeOpen"><Sun v-if="theme === 'draft' || theme === 'warm'" :size="15" /><Moon v-else-if="theme === 'night'" :size="15" /><PanelTop v-else :size="15" />{{ themeLabel }}<ChevronDown :size="13" /></button><div v-if="themeOpen" class="theme-menu" role="menu"><button v-for="choice in (['system','draft','night','warm'] as ThemeName[])" :key="choice" role="menuitemradio" :aria-checked="theme === choice" @click="chooseTheme(choice)"><span :class="`theme-swatch swatch-${choice}`"></span>{{ ({ system: 'System · 跟随 macOS', draft: 'Draft Light', night: 'Night Ops', warm: 'Warm Paper' } as const)[choice] }}</button></div></div>
-        <div class="popover-control"><button class="icon-button" aria-label="更多" :aria-expanded="moreOpen" @click="moreOpen = !moreOpen; helpOpen = false"><MoreHorizontal :size="18" /></button><section v-if="moreOpen" class="utility-popover more-popover"><button @click="showDefinition(); moreOpen = false"><FileCode2 :size="15" />查看 Pipeline 定义</button><button @click="openDoctor"><Settings :size="15" />Environment Doctor</button><button @click="checkUpdate(); moreOpen = false"><RefreshCw :size="15" />检查版本更新</button><button @click="resetDemo(); moreOpen = false"><RotateCcw :size="15" />重置演示 Run</button></section></div>
+        <div class="popover-control"><button class="icon-button" aria-label="更多" :aria-expanded="moreOpen" @click="moreOpen = !moreOpen; helpOpen = false"><MoreHorizontal :size="18" /></button><section v-if="moreOpen" class="utility-popover more-popover"><button @click="returnToLauncher"><Plus :size="15" />新建 Mission</button><button @click="showDefinition(); moreOpen = false"><FileCode2 :size="15" />查看 Plugin 定义</button><button @click="openDoctor"><Settings :size="15" />Environment Doctor</button><button @click="checkUpdate(); moreOpen = false"><RefreshCw :size="15" />检查版本更新</button><button @click="resetDemo(); moreOpen = false"><RotateCcw :size="15" />重置演示 Run</button></section></div>
       </div>
     </nav>
 
     <main v-if="mainView === 'run'" class="run-workspace" :class="{ 'node-focus': nodeFocused }">
       <AttentionRail :items="run.attention" :selected-node-id="selectedNodeId" @select="selectNode" />
       <section class="graph-column">
-        <div class="run-context"><span><strong>{{ completedCount }}/{{ run.nodes.length }}</strong> 大节点完成</span><p>{{ run.brief }}</p><button @click="resetDemo"><RotateCcw :size="14" />重置示例</button></div>
+        <div class="run-context"><span><strong>{{ completedCount }}/{{ run.nodes.length }}</strong> 大节点完成</span><p>{{ run.brief }}</p><button @click="returnToLauncher"><Plus :size="14" />新建 Mission</button></div>
         <RunGraph :nodes="run.nodes" :edges="definition.edges" :selected-node-id="selectedNodeId" @select="selectNode" />
         <footer class="run-statusbar"><span><Boxes :size="14" />{{ run.workspace }}</span><span><GitBranch :size="14" />{{ run.branch }}</span><span>{{ run.eventCount }} events · SQLite durable</span></footer>
       </section>
@@ -238,11 +295,12 @@ async function installProposal() {
             <label class="package-source"><span>Package source</span><input v-model="authorPackagePath" /></label>
             <p v-if="packageInstallMessage" :class="['install-result', packageInstallState]">{{ packageInstallMessage }}</p>
           </div>
-          <footer><button class="secondary-action" @click="notify(`Existing source: ${authorPackagePath}`)">显示现有 Source 路径</button><button class="primary-action" :disabled="packageInstallState === 'installing'" @click="installProposal">{{ packageInstallState === 'installing' ? 'Validating…' : packageInstallState === 'installed' ? 'Installed' : 'Validate & Install Existing Source' }}</button></footer>
+          <footer><button class="secondary-action" @click="notify(`Existing source: ${authorPackagePath}`)">显示现有 Source 路径</button><button class="primary-action" :disabled="packageInstallState === 'installing'" @click="installProposal()">{{ packageInstallState === 'installing' ? 'Validating…' : packageInstallState === 'installed' ? 'Installed' : 'Validate & Install Existing Source' }}</button></footer>
         </template>
         <template v-else><Plus :size="34" /><strong>Design prototype 会在这里出现</strong><span>当前用于验证审查体验；本地模型生成 Package 的执行链路尚未接入。</span></template>
       </section>
     </main>
+    </template>
     <div class="app-toast" role="status" aria-live="polite" :class="{ visible: toast }">{{ toast }}</div>
     <div v-if="updateOpen" class="update-backdrop" @click.self="updateState !== 'installing' && (updateOpen = false)">
       <section class="update-dialog" role="dialog" aria-modal="true" aria-labelledby="update-title">

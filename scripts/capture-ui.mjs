@@ -109,13 +109,8 @@ try {
 
   await evaluate("localStorage.clear(); location.reload()");
   await pause(900);
-  await capture("onboarding-privacy.png");
-  await clickButton("继续", true);
-  await clickButton("继续", true);
-  await capture("onboarding-doctor.png");
-  await clickButton("继续", true);
-  await clickButton("继续", true);
-  await clickButton("进入 Mission Control");
+  await capture("mission-launcher.png");
+  await clickButton("打开 Demo Mission");
   await evaluate(`(() => {
     const indicator = document.querySelector('.runner-indicator');
     if (indicator) {
@@ -135,8 +130,8 @@ try {
 
   await clickButton("Deliverables");
   await capture("deliverables.png");
-  await clickButton("Create Pipeline");
-  await clickButton("生成 Package Proposal");
+  await clickButton("Create Preview");
+  await clickButton("预览 Package Proposal");
   await capture("create-pipeline.png");
 
   await clickButton("Graph", true);
