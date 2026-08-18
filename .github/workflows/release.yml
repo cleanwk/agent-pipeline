@@ -1,3 +1,8 @@
+# Origin CI contract: Depot and Buildkite run these GitHub Actions
+# workflows unchanged on Origin-hosted repositories. They cannot attach
+# while this repo is a GitHub inbound mirror. Origin has no native
+# runners and no Release asset host, so the DMG is uploaded as a CI
+# artifact; GitHub Release publishing stays GitHub-only.
 name: Release macOS DMG
 
 on:
@@ -128,14 +133,58 @@ jobs:
             printf '%s<<%s\n%s\n%s\n' "$name" "$delimiter" "${!name}" "$delimiter" >> "$GITHUB_ENV"
           done
 
-      - name: Build and publish DMG
-        uses: tauri-apps/tauri-action@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Apple Silicon DMG
+        run: pnpm tauri:build
+
+      - name: Collect bundle artifacts
+        id: bundle
+        shell: bash
+        run: |
+          shopt -s nullglob
+          dmg=(target/aarch64-apple-darwin/release/bundle/dmg/*.dmg)
+          if test "${#dmg[@]}" -ne 1; then
+            echo "Expected exactly one DMG, found ${#dmg[@]}." >&2
+            printf '%s\n' "${dmg[@]}" >&2
+            exit 1
+          fi
+          {
+            echo "dmg=${dmg[0]}"
+            echo "version=${{ steps.version.outputs.version }}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
         with:
-          tagName: v__VERSION__
-          releaseName: Agent Pipeline v__VERSION__
-          releaseBody: Download the Apple Silicon DMG below and drag Agent Pipeline into Applications.
-          generateReleaseNotes: true
-          releaseDraft: false
-          args: --target aarch64-apple-darwin
+          name: agent-pipeline-${{ steps.version.outputs.version }}-aarch64-apple-darwin
+          path: |
+            target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+            target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz
+            target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz.sig
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: Push immutable release tag
+        shell: bash
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          git tag "v${version}"
+          git push origin "refs/tags/v${version}"
+
+      - name: Publish GitHub Release
+        if: github.server_url == 'https://github.com'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          shopt -s nullglob
+          assets=(
+            target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+            target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz
+            target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz.sig
+          )
+          gh release create "v${version}" \
+            --title "Agent Pipeline v${version}" \
+            --notes "Download the Apple Silicon DMG below and drag Agent Pipeline into Applications." \
+            --verify-tag \
+            -- "${assets[@]}"

@@ -1,3 +1,6 @@
+# Origin CI contract: Depot and Buildkite run these GitHub Actions
+# workflows unchanged on Origin-hosted repositories. They cannot attach
+# while this repo is a GitHub inbound mirror.
 name: CI
 
 on:

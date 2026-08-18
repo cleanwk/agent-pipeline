@@ -58,9 +58,24 @@ brew install --cask cleanwk/tap/agent-pipeline
 
 ## 发布新版本
 
-运行 `pnpm release:version <版本号>`（例如 `pnpm release:version 0.2.0`），检查生成的版本改动后提交并推送到 `master`。脚本会同步根项目、桌面端、Tauri 和 Rust workspace 的版本；只有 `master` 上的 `VERSION` 发生变化时才会触发 GitHub Actions，在 macOS runner 上构建 Apple Silicon DMG，然后创建 `v<版本号>` GitHub Release。普通开发提交不会触发发布构建；常规 CI 仅在 Pull Request 或手动触发时运行。配置 Apple signing secrets 后，构建还会完成 Developer ID 签名与公证。用户可以直接从该 Release 下载 DMG 安装。
+运行 `pnpm release:version <版本号>`（例如 `pnpm release:version 0.2.0`），检查生成的版本改动后提交并推送到 `master`。脚本会同步根项目、桌面端、Tauri 和 Rust workspace 的版本；只有 `master` 上的 `VERSION` 发生变化时才会触发打包工作流，在 macOS runner 上构建 Apple Silicon DMG，并打上不可变的 `v<版本号>` Tag。普通开发提交不会触发发布构建；常规 CI 仅在 Pull Request 或手动触发时运行。配置 Apple signing secrets 后，构建还会完成 Developer ID 签名与公证。
 
-如需 Developer ID 签名与公证，仓库应配置 `APPLE_CERTIFICATE`、`APPLE_CERTIFICATE_PASSWORD`、`APPLE_SIGNING_IDENTITY`、`APPLE_ID`、`APPLE_PASSWORD`、`APPLE_TEAM_ID`。Apple 与 Tauri updater 两组 secrets 都是可选配置，但每组一旦启用就必须完整配置；均未配置时工作流会发布未签名 DMG。工作流会拒绝覆盖已经存在的版本 Tag，失败后应发布一个新版本号。
+工作流会把 DMG（以及启用 updater 时的 `.app.tar.gz` / `.sig`）上传为 CI artifact。在 GitHub 上运行时，还会创建 GitHub Release，用户可以从该 Release 下载 DMG 安装。Origin 目前没有 Release 资源托管，Origin 上的安装包要从 Depot / Buildkite 的 run artifact 下载。
+
+如需 Developer ID 签名与公证，CI 提供方应配置 `APPLE_CERTIFICATE`、`APPLE_CERTIFICATE_PASSWORD`、`APPLE_SIGNING_IDENTITY`、`APPLE_ID`、`APPLE_PASSWORD`、`APPLE_TEAM_ID`。Apple 与 Tauri updater 两组 secrets 都是可选配置，但每组一旦启用就必须完整配置；均未配置时工作流会发布未签名 DMG。工作流会拒绝覆盖已经存在的版本 Tag，失败后应发布一个新版本号。
+
+### Origin
+
+Origin 本身不执行 `.github/workflows`。镜像自 GitHub 的仓库会把 CI 留在 GitHub；只有 **Origin 托管**（非 inbound mirror）的仓库才能在 **Settings → Apps** 连接 [Depot](https://cursor.com/docs/origin/settings.md#apps) 或 Buildkite，由它们用 macOS runner 执行同一套 workflow。
+
+若这个 Origin 副本仍显示 GitHub inbound mirror：
+
+1. 打开仓库 **Settings → General → Danger Zone**，选择 **Detach from GitHub**，让 Origin 成为源仓库。分离不会删除 GitHub 上的原仓库。
+2. 在 [Codebase Apps](https://cursor.com/codebase/settings/apps) 安装 Depot（或 Buildkite），再回到本仓库 **Settings → Apps** 启用它。打包需要 **macOS** runner；Depot CI 的 Linux sandbox 不能打 Apple Silicon DMG。
+3. 在 Depot / Buildkite 中配置与 GitHub 相同的可选签名 secrets。
+4. 之后 `VERSION` 推到 `master` 会在 Origin 上跑打包；检查会显示在 Origin PR 的 **Checks** 页，DMG 在对应 CI run 的 artifacts 里。
+
+Cursor Automations 可以在 Origin 的 push / PR 事件上拉起 Cloud Agent，但 Cloud Agent 跑在 Linux 上，不能替代 macOS DMG 打包。
 
 ## Design and architecture
 
