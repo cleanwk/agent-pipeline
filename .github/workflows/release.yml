@@ -71,7 +71,7 @@ jobs:
               test -n "${!name}" || missing+=("$name")
             done
             if test "${#missing[@]}" -ne 0; then
-              echo "${label} is required for public macOS releases; missing secrets: ${missing[*]}" >&2
+              echo "${label} is required for macOS releases; missing secrets: ${missing[*]}" >&2
               exit 1
             fi
           }
@@ -91,31 +91,34 @@ jobs:
             test "$configured" -eq "$#"
           }
 
-          updater_signing=false
-          require_secret_group "Apple signing and notarization" APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
-          validate_optional_secret_group "Tauri updater signing" TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD TAURI_UPDATER_PUBLIC_KEY && updater_signing=true
+          apple_signing=false
+          validate_optional_secret_group "Apple signing and notarization" APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID && apple_signing=true
+          require_secret_group "Tauri updater signing" TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD TAURI_UPDATER_PUBLIC_KEY
 
-          echo "updater_signing=${updater_signing}" >> "$GITHUB_OUTPUT"
+          if test "$apple_signing" = true; then
+            signing_mode=developer-id
+          else
+            signing_mode=adhoc
+          fi
+          echo "apple_signing=${apple_signing}" >> "$GITHUB_OUTPUT"
+          echo "signing_mode=${signing_mode}" >> "$GITHUB_OUTPUT"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
 
       - name: Configure updater artifacts
         env:
           TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
-          UPDATER_SIGNING: ${{ steps.version.outputs.updater_signing }}
         run: |
           node - <<'NODE'
           const fs = require("node:fs");
           const path = "apps/desktop/src-tauri/tauri.conf.json";
           const config = JSON.parse(fs.readFileSync(path, "utf8"));
-          const updaterSigning = process.env.UPDATER_SIGNING === "true";
-          config.bundle.createUpdaterArtifacts = updaterSigning;
-          if (updaterSigning) {
-            config.plugins.updater.pubkey = process.env.TAURI_UPDATER_PUBLIC_KEY;
-          }
+          config.bundle.createUpdaterArtifacts = true;
+          config.plugins.updater.pubkey = process.env.TAURI_UPDATER_PUBLIC_KEY;
           fs.writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`);
           NODE
 
       - name: Export Apple signing environment
+        if: steps.version.outputs.apple_signing == 'true'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -130,8 +133,11 @@ jobs:
             printf '%s<<%s\n%s\n%s\n' "$name" "$delimiter" "${!name}" "$delimiter" >> "$GITHUB_ENV"
           done
 
+      - name: Configure ad-hoc signing
+        if: steps.version.outputs.apple_signing != 'true'
+        run: echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
+
       - name: Export updater signing environment
-        if: steps.version.outputs.updater_signing == 'true'
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -150,17 +156,19 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: Agent Pipeline v__VERSION__
-          releaseBody: Download the Apple Silicon DMG below and drag Agent Pipeline into Applications.
+          releaseBody: Download the Apple Silicon DMG below and drag Agent Pipeline into Applications. Development releases are ad-hoc signed, so macOS may require Open Anyway on first launch.
           generateReleaseNotes: true
           releaseDraft: true
           args: --target aarch64-apple-darwin
 
-      - name: Verify signed and notarized bundle
+      - name: Verify bundled release
+        env:
+          SIGNING_MODE: ${{ steps.version.outputs.signing_mode }}
         shell: bash
         run: |
           app_path="target/aarch64-apple-darwin/release/bundle/macos/Agent Pipeline.app"
           dmg_path="$(find target/aarch64-apple-darwin/release/bundle/dmg -maxdepth 1 -name '*.dmg' -print -quit)"
-          scripts/verify-macos-release.sh "$app_path" "$dmg_path"
+          scripts/verify-macos-release.sh "$app_path" "$dmg_path" "$SIGNING_MODE"
 
       - name: Publish verified release
         env:
